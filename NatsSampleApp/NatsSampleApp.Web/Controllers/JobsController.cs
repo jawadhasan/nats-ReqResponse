@@ -4,6 +4,7 @@ using System.Text;
 using NATS.Client;
 using NatsSampleApp.Common;
 using NatsSampleApp.Web.Dto;
+using ModbusPOC.CommandMessages;
 
 namespace NatsSampleApp.Web.Controllers
 {
@@ -19,9 +20,30 @@ namespace NatsSampleApp.Web.Controllers
             try
             {
                 //TODO: Model Validation
+                // var job = new Job(jobRequest.Command);
+                var job = new EmptyCommand("","","");
+                var operationResult = PublishMessageService(job);
+                return Ok(operationResult);
 
-                var job = new Job(jobRequest.Command);
-                var operationResult = PublishMessageDBDataService(job);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                return BadRequest(e.Message);
+            }
+
+        }
+
+
+        [HttpPost("ExecuteJob")]
+        public IActionResult ExecuteJob([FromBody] PrinterCommand printerCommand)
+        {
+
+            try
+            {
+                //TODO: Model Validation              
+                var command = CommandBuilder.BuildCommand(printerCommand);
+                var operationResult = PublishMessageService(command);
                 return Ok(operationResult);
             }
             catch (Exception e)
@@ -32,11 +54,10 @@ namespace NatsSampleApp.Web.Controllers
 
         }
 
-        private JobResponse PublishMessageDBDataService(Job job)
+        private PrinterOperationResult PublishMessageService(ICommand command)
         {
             var opts = ConnectionFactory.GetDefaultOptions();
-            opts.Url = CommonConfigs.MessageBrokerUrl;
-            var commandsSubject = CommonConfigs.JobWorkerSubject;
+            opts.Url = CommonConfigs.MessageBrokerUrl;         
 
             using (IConnection c = new ConnectionFactory().CreateConnection(opts))
             {
@@ -50,15 +71,15 @@ namespace NatsSampleApp.Web.Controllers
 
              
                 // send with reply subject
-                var data = JsonHelpers.Serialize(job);
+                var data = JsonHelpers.Serialize(command);
                 c.Publish(CommonConfigs.JobWorkerSubject, replySubject, data);
 
                 // wait for response in reply subject
-                var response = subscription.NextMessage(5000);
+                var response = subscription.NextMessage(10000);
 
                 //var responseData = Encoding.UTF8.GetString(response.Data);
 
-                var jobResponse = JsonHelpers.Deserialize<JobResponse>(response.Data);
+                var jobResponse = JsonHelpers.Deserialize<PrinterOperationResult>(response.Data);
 
 
                 return jobResponse;
@@ -68,5 +89,7 @@ namespace NatsSampleApp.Web.Controllers
 
         }
     }
+
+
 }
 
